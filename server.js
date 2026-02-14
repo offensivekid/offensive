@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import bcrypt from 'bcrypt';
 import session from 'express-session';
 import connectSqlite3 from 'connect-sqlite3';
-import rateLimit from 'express-rate-limit';
+import { rateLimit } from 'express-rate-limit';
 import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
