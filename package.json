@@ -1,6 +1,7 @@
 {
   "name": "offensive-forum",
   "version": "2.0.0",
+  "type": "module",
   "description": "Secure forum with local SQLite database and private threads",
   "main": "server.js",
   "scripts": {
