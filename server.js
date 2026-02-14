@@ -2,9 +2,7 @@ import express from 'express';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcrypt';
 import session from 'express-session';
-import SqliteStore from 'connect-sqlite3';
-import rateLimit from 'express-rate-limit';
-import helmet from 'helmet';
+import connectSqlite3 from 'connect-sqlite3';import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -19,8 +17,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // SQLite Session Store
-const SQLiteStore = SqliteStore(session);
-
+const SQLiteStore = connectSqlite3(session);6
 // Database connection
 const db = new Database(process.env.DB_PATH || './database.sqlite');
 db.pragma('foreign_keys = ON');
