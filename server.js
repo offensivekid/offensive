@@ -2,10 +2,10 @@ import express from 'express';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcrypt';
 import session from 'express-session';
+import SqliteStore from 'connect-sqlite3';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import cors from 'cors';
-import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,23 +18,24 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// SQLite Session Store
+const SQLiteStore = SqliteStore(session);
+
 // Database connection
 const db = new Database(process.env.DB_PATH || './database.sqlite');
 db.pragma('foreign_keys = ON');
 
+console.log('🔧 Initializing offensive-forum...');
+
 // ============= AUTO-INITIALIZE DATABASE =============
 
-function initializeDatabase() {
-  console.log('🔧 Checking database...');
-  
-  // Check if tables exist
+function initDB() {
   const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
   const tableNames = tables.map(t => t.name);
   
   if (!tableNames.includes('users')) {
-    console.log('📦 Initializing database tables...');
+    console.log('📦 Creating database tables...');
     
-    // Users table
     db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,26 +45,9 @@ function initializeDatabase() {
         is_admin BOOLEAN DEFAULT 0,
         has_private_access BOOLEAN DEFAULT 0,
         created_at INTEGER NOT NULL,
-        last_login INTEGER,
-        CONSTRAINT username_length CHECK (length(username) >= 3 AND length(username) <= 50),
-        CONSTRAINT email_format CHECK (email LIKE '%@%')
-      )
-    `);
-    
-    // Sessions table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        session_token TEXT UNIQUE NOT NULL,
-        expires_at INTEGER NOT NULL,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      )
-    `);
-    
-    // Threads table
-    db.exec(`
+        last_login INTEGER
+      );
+      
       CREATE TABLE IF NOT EXISTS threads (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -72,15 +56,9 @@ function initializeDatabase() {
         is_private BOOLEAN DEFAULT 0,
         views INTEGER DEFAULT 0,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL,
-        FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
-        CONSTRAINT title_length CHECK (length(title) >= 5 AND length(title) <= 200),
-        CONSTRAINT body_length CHECK (length(body) >= 10 AND length(body) <= 5000)
-      )
-    `);
-    
-    // Replies table
-    db.exec(`
+        FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      
       CREATE TABLE IF NOT EXISTS replies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         thread_id INTEGER NOT NULL,
@@ -88,13 +66,9 @@ function initializeDatabase() {
         text TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE,
-        FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE,
-        CONSTRAINT text_length CHECK (length(text) >= 5 AND length(text) <= 2000)
-      )
-    `);
-    
-    // Access Keys table
-    db.exec(`
+        FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+      
       CREATE TABLE IF NOT EXISTS access_keys (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         key_code TEXT UNIQUE NOT NULL,
@@ -103,351 +77,217 @@ function initializeDatabase() {
         used_by INTEGER,
         created_at INTEGER NOT NULL,
         used_at INTEGER,
-        FOREIGN KEY (created_by) REFERENCES users(id),
-        FOREIGN KEY (used_by) REFERENCES users(id)
-      )
-    `);
-    
-    // SIEM Events table
-    db.exec(`
+        FOREIGN KEY (created_by) REFERENCES users(id)
+      );
+      
       CREATE TABLE IF NOT EXISTS siem_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_type TEXT NOT NULL,
         severity TEXT NOT NULL,
         user_id INTEGER,
         ip_address TEXT,
-        user_agent TEXT,
         details TEXT,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users(id)
-      )
+        created_at INTEGER NOT NULL
+      );
+      
+      CREATE INDEX idx_threads_created ON threads(created_at DESC);
+      CREATE INDEX idx_replies_thread ON replies(thread_id);
+      CREATE INDEX idx_access_keys_code ON access_keys(key_code);
     `);
     
-    // Indexes
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(session_token)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_threads_author ON threads(author_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_threads_created ON threads(created_at DESC)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_replies_thread ON replies(thread_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_replies_author ON replies(author_id)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_access_keys_code ON access_keys(key_code)`);
-    db.exec(`CREATE INDEX IF NOT EXISTS idx_siem_events_created ON siem_events(created_at DESC)`);
+    console.log('✅ Tables created');
     
-    console.log('✅ Database tables created');
-    
-    // Create admin user
+    // Create admin
     const adminUsername = process.env.ADMIN_USERNAME || 'admin';
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const adminEmail = process.env.ADMIN_EMAIL || 'admin@offensive-forum.local';
     
-    const existingAdmin = db.prepare('SELECT id FROM users WHERE username = ?').get(adminUsername);
+    const hash = bcrypt.hashSync(adminPassword, 12);
+    const adminResult = db.prepare(`
+      INSERT INTO users (username, email, password_hash, is_admin, has_private_access, created_at)
+      VALUES (?, ?, ?, 1, 1, ?)
+    `).run(adminUsername, adminEmail, hash, Date.now());
     
-    if (!existingAdmin) {
-      const passwordHash = bcrypt.hashSync(adminPassword, parseInt(process.env.BCRYPT_ROUNDS) || 12);
-      
-      const adminResult = db.prepare(`
-        INSERT INTO users (username, email, password_hash, is_admin, has_private_access, created_at)
-        VALUES (?, ?, ?, 1, 1, ?)
-      `).run(adminUsername, adminEmail, passwordHash, Date.now());
-      
-      console.log(`✅ Admin user created: ${adminUsername}`);
-      console.log(`⚠️  Default password: ${adminPassword}`);
-      console.log(`🔒 CHANGE THE PASSWORD IMMEDIATELY!`);
-      
-      // Create sample threads
-      const adminId = adminResult.lastInsertRowid;
-      
-      db.prepare(`
-        INSERT INTO threads (title, body, author_id, is_private, created_at, updated_at)
-        VALUES (?, ?, ?, 0, ?, ?)
-      `).run(
-        'Welcome to offensive-forum',
-        'This is the first public thread. Everyone can see this!',
-        adminId,
-        Date.now(),
-        Date.now()
-      );
-      
-      db.prepare(`
-        INSERT INTO threads (title, body, author_id, is_private, created_at, updated_at)
-        VALUES (?, ?, ?, 1, ?, ?)
-      `).run(
-        'Private: Advanced Security Topics',
-        'This thread is private and only visible to users with special access keys.',
-        adminId,
-        Date.now(),
-        Date.now()
-      );
-      
-      // Generate sample access key
-      const sampleKey = generateAccessKey();
-      
-      db.prepare(`
-        INSERT INTO access_keys (key_code, created_by, created_at)
-        VALUES (?, ?, ?)
-      `).run(sampleKey, adminId, Date.now());
-      
-      console.log(`🔑 Sample access key: ${sampleKey}`);
-      console.log(`💡 Use this key to access private threads!`);
-    }
+    console.log(`✅ Admin created: ${adminUsername}`);
+    
+    // Sample threads
+    const adminId = adminResult.lastInsertRowid;
+    
+    db.prepare(`
+      INSERT INTO threads (title, body, author_id, is_private, created_at)
+      VALUES (?, ?, ?, 0, ?)
+    `).run('Welcome to offensive-forum', 'This is a public thread. Everyone can see this!', adminId, Date.now());
+    
+    db.prepare(`
+      INSERT INTO threads (title, body, author_id, is_private, created_at)
+      VALUES (?, ?, ?, 1, ?)
+    `).run('Private: Advanced Topics', 'This is private. Only users with access key can see this.', adminId, Date.now());
+    
+    // Sample key
+    const key = generateKey();
+    db.prepare(`
+      INSERT INTO access_keys (key_code, created_by, created_at)
+      VALUES (?, ?, ?)
+    `).run(key, adminId, Date.now());
+    
+    console.log(`🔑 Sample key: ${key}`);
   } else {
-    console.log('✅ Database already initialized');
+    console.log('✅ Database ready');
   }
 }
 
-// Helper function for key generation
-function generateAccessKey() {
+function generateKey() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const parts = [];
-  
-  for (let i = 0; i < 4; i++) {
-    let part = '';
-    for (let j = 0; j < 4; j++) {
-      part += chars[Math.floor(Math.random() * chars.length)];
-    }
-    parts.push(part);
-  }
-  
-  return parts.join('-');
+  return Array(4).fill(0).map(() => 
+    Array(4).fill(0).map(() => chars[Math.floor(Math.random() * chars.length)]).join('')
+  ).join('-');
 }
 
-// Initialize database on startup
-initializeDatabase();
+initDB();
 
 // ============= MIDDLEWARE =============
 
-app.use(helmet({
-  contentSecurityPolicy: false // Отключаем строгий CSP для работы inline-скриптов
-}));
-
-app.use(cors({
-  origin: true, // Разрешаем все origins
-  credentials: true
-}));
-
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Session middleware
+// Session with SQLite store
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'change-this-secret',
+  store: new SQLiteStore({
+    db: 'sessions.sqlite',
+    dir: '.'
+  }),
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: parseInt(process.env.SESSION_MAX_AGE) || 86400000
+    maxAge: 86400000 // 24h
   }
 }));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 60000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: 'Too many requests, please try again later'
+  windowMs: 60000,
+  max: 100
 });
-
 app.use('/api/', limiter);
 
-// Serve static files
+// Static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ============= SIEM LOGGING =============
+// ============= HELPERS =============
 
-function logSIEMEvent(type, severity, req, details = {}) {
+function sanitize(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[<>]/g, '').trim();
+}
+
+function logSIEM(type, severity, req, details = {}) {
   try {
     db.prepare(`
-      INSERT INTO siem_events (event_type, severity, user_id, ip_address, user_agent, details, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      type,
-      severity,
-      req.session?.userId || null,
-      req.ip,
-      req.get('user-agent') || 'unknown',
-      JSON.stringify(details),
-      Date.now()
-    );
-  } catch (error) {
-    console.error('SIEM logging error:', error);
+      INSERT INTO siem_events (event_type, severity, user_id, ip_address, details, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(type, severity, req.session?.userId || null, req.ip, JSON.stringify(details), Date.now());
+  } catch (e) {
+    console.error('SIEM error:', e);
   }
 }
-
-// ============= HELPER FUNCTIONS =============
-
-function sanitizeInput(input) {
-  if (typeof input !== 'string') return '';
-  return input
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;')
-    .trim();
-}
-
-function validateUsername(username) {
-  if (!username || typeof username !== 'string') return false;
-  if (username.length < 3 || username.length > 50) return false;
-  return /^[a-zA-Z0-9_\-]+$/.test(username);
-}
-
-function validateEmail(email) {
-  if (!email || typeof email !== 'string') return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function validatePassword(password) {
-  if (!password || typeof password !== 'string') return false;
-  return password.length >= 6 && password.length <= 100;
-}
-
-function detectXSS(input) {
-  const xssPatterns = [
-    /<script[^>]*>/i,
-    /javascript:/i,
-    /on\w+\s*=/i,
-    /<iframe/i,
-    /eval\(/i
-  ];
-  
-  for (const pattern of xssPatterns) {
-    if (pattern.test(input)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// ============= AUTH MIDDLEWARE =============
 
 function requireAuth(req, res, next) {
   if (!req.session.userId) {
-    return res.status(401).json({ error: 'Authentication required' });
+    return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: 'Authentication required' });
+  if (!req.session.userId || !req.session.isAdmin) {
+    return res.status(403).json({ error: 'Admin required' });
   }
-  
-  const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.session.userId);
-  
-  if (!user || !user.is_admin) {
-    logSIEMEvent('unauthorized_admin_access', 'high', req, { userId: req.session.userId });
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  
   next();
 }
 
-// ============= API ROUTES =============
+// ============= AUTH API =============
 
-// Register
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
     
-    // Validation
-    if (!validateUsername(username)) {
-      return res.status(400).json({ error: 'Invalid username format' });
+    if (!username || username.length < 3 || username.length > 50) {
+      return res.status(400).json({ error: 'Invalid username' });
     }
     
-    if (!validateEmail(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ error: 'Invalid email' });
     }
     
-    if (!validatePassword(password)) {
-      return res.status(400).json({ error: 'Password must be 6-100 characters' });
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password too short' });
     }
     
-    // XSS check
-    if (detectXSS(username) || detectXSS(email)) {
-      logSIEMEvent('xss_attempt', 'high', req, { username, email });
-      return res.status(400).json({ error: 'Invalid input detected' });
+    const exists = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
+    if (exists) {
+      return res.status(400).json({ error: 'User already exists' });
     }
     
-    // Check if user exists
-    const existingUser = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
+    const hash = await bcrypt.hash(password, 12);
     
-    if (existingUser) {
-      return res.status(400).json({ error: 'Username or email already exists' });
-    }
-    
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, parseInt(process.env.BCRYPT_ROUNDS) || 12);
-    
-    // Create user
-    const result = db.prepare(`
+    db.prepare(`
       INSERT INTO users (username, email, password_hash, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(sanitizeInput(username), email.toLowerCase(), passwordHash, Date.now());
+    `).run(sanitize(username), email.toLowerCase(), hash, Date.now());
     
-    logSIEMEvent('user_registered', 'low', req, { userId: result.lastInsertRowid, username });
+    logSIEM('user_registered', 'low', req, { username });
     
-    res.json({ success: true, message: 'Registration successful' });
-    
+    res.json({ success: true });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// Login
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password, accessKey } = req.body;
     
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
-    }
-    
-    // Get user
     const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
     
     if (!user) {
-      logSIEMEvent('failed_login', 'medium', req, { username, reason: 'user_not_found' });
+      logSIEM('failed_login', 'medium', req, { username, reason: 'not_found' });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    // Check password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const valid = await bcrypt.compare(password, user.password_hash);
     
-    if (!validPassword) {
-      logSIEMEvent('failed_login', 'medium', req, { username, reason: 'wrong_password' });
+    if (!valid) {
+      logSIEM('failed_login', 'medium', req, { username, reason: 'wrong_password' });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
-    // Check access key (если предоставлен)
+    // Check access key if provided
     if (accessKey && accessKey.trim()) {
-      const key = db.prepare('SELECT * FROM access_keys WHERE key_code = ? AND is_active = 1').get(accessKey);
+      const key = db.prepare('SELECT * FROM access_keys WHERE key_code = ? AND is_active = 1').get(accessKey.toUpperCase());
       
       if (key) {
-        // Activate private access
         db.prepare('UPDATE users SET has_private_access = 1 WHERE id = ?').run(user.id);
-        
-        // Mark key as used
         db.prepare('UPDATE access_keys SET is_active = 0, used_by = ?, used_at = ? WHERE id = ?')
           .run(user.id, Date.now(), key.id);
-        
-        logSIEMEvent('access_key_used', 'low', req, { userId: user.id, keyId: key.id });
+        user.has_private_access = 1;
+        logSIEM('key_used', 'low', req, { userId: user.id, keyId: key.id });
       }
     }
     
-    // Update last login
     db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(Date.now(), user.id);
     
-    // Create session
     req.session.userId = user.id;
     req.session.username = user.username;
     req.session.isAdmin = Boolean(user.is_admin);
     req.session.hasPrivateAccess = Boolean(user.has_private_access);
     
-    logSIEMEvent('successful_login', 'low', req, { userId: user.id, username: user.username });
+    logSIEM('successful_login', 'low', req, { userId: user.id });
     
     res.json({
       success: true,
@@ -458,15 +298,13 @@ app.post('/api/auth/login', async (req, res) => {
         hasPrivateAccess: Boolean(user.has_private_access)
       }
     });
-    
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Logout
-app.post('/api/auth/logout', requireAuth, (req, res) => {
+app.post('/api/auth/logout', (req, res) => {
   req.session.destroy(err => {
     if (err) {
       return res.status(500).json({ error: 'Logout failed' });
@@ -475,7 +313,6 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
   });
 });
 
-// Get current user
 app.get('/api/auth/me', requireAuth, (req, res) => {
   const user = db.prepare('SELECT id, username, is_admin, has_private_access FROM users WHERE id = ?')
     .get(req.session.userId);
@@ -492,9 +329,8 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   });
 });
 
-// ============= THREADS =============
+// ============= THREADS API =============
 
-// Get all threads
 app.get('/api/threads', (req, res) => {
   try {
     const userId = req.session?.userId;
@@ -507,7 +343,6 @@ app.get('/api/threads', (req, res) => {
       JOIN users u ON t.author_id = u.id
     `;
     
-    // Если не админ и нет приватного доступа - показываем только публичные
     if (!user || (!user.is_admin && !user.has_private_access)) {
       query += ' WHERE t.is_private = 0';
     }
@@ -520,14 +355,12 @@ app.get('/api/threads', (req, res) => {
       ...t,
       is_private: Boolean(t.is_private)
     })));
-    
   } catch (error) {
     console.error('Get threads error:', error);
     res.status(500).json({ error: 'Failed to fetch threads' });
   }
 });
 
-// Get single thread
 app.get('/api/threads/:id', (req, res) => {
   try {
     const threadId = parseInt(req.params.id);
@@ -544,7 +377,6 @@ app.get('/api/threads/:id', (req, res) => {
       return res.status(404).json({ error: 'Thread not found' });
     }
     
-    // Проверка доступа к приватной теме
     if (thread.is_private) {
       if (!userId) {
         return res.status(403).json({ error: 'Access denied' });
@@ -553,84 +385,57 @@ app.get('/api/threads/:id', (req, res) => {
       const user = db.prepare('SELECT has_private_access, is_admin FROM users WHERE id = ?').get(userId);
       
       if (!user || (!user.is_admin && !user.has_private_access)) {
-        logSIEMEvent('unauthorized_private_thread_access', 'medium', req, { threadId, userId });
-        return res.status(403).json({ error: 'Access denied to private thread' });
+        logSIEM('unauthorized_access', 'medium', req, { threadId });
+        return res.status(403).json({ error: 'Access denied' });
       }
     }
     
-    // Increment views
     db.prepare('UPDATE threads SET views = views + 1 WHERE id = ?').run(threadId);
     
     res.json({
       ...thread,
       is_private: Boolean(thread.is_private)
     });
-    
   } catch (error) {
     console.error('Get thread error:', error);
     res.status(500).json({ error: 'Failed to fetch thread' });
   }
 });
 
-// Create thread
 app.post('/api/threads', requireAuth, (req, res) => {
   try {
     const { title, body, isPrivate } = req.body;
     const userId = req.session.userId;
     
-    // Валидация
     if (!title || title.length < 5 || title.length > 200) {
-      return res.status(400).json({ error: 'Title must be 5-200 characters' });
+      return res.status(400).json({ error: 'Invalid title' });
     }
     
     if (!body || body.length < 10 || body.length > 5000) {
-      return res.status(400).json({ error: 'Body must be 10-5000 characters' });
+      return res.status(400).json({ error: 'Invalid body' });
     }
     
-    // XSS check
-    if (detectXSS(title) || detectXSS(body)) {
-      logSIEMEvent('xss_attempt', 'high', req, { title, body });
-      return res.status(400).json({ error: 'Invalid input detected' });
-    }
-    
-    // КРИТИЧНО: Проверка прав на создание приватных тем
-    if (isPrivate) {
-      const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(userId);
-      
-      if (!user || !user.is_admin) {
-        logSIEMEvent('unauthorized_private_thread_creation', 'high', req, { userId, title });
-        return res.status(403).json({ error: 'Only admins can create private threads' });
-      }
+    if (isPrivate && !req.session.isAdmin) {
+      logSIEM('unauthorized_private_thread', 'high', req, { userId });
+      return res.status(403).json({ error: 'Only admins can create private threads' });
     }
     
     const result = db.prepare(`
-      INSERT INTO threads (title, body, author_id, is_private, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      sanitizeInput(title),
-      sanitizeInput(body),
-      userId,
-      isPrivate ? 1 : 0,
-      Date.now(),
-      Date.now()
-    );
+      INSERT INTO threads (title, body, author_id, is_private, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(sanitize(title), sanitize(body), userId, isPrivate ? 1 : 0, Date.now());
     
-    logSIEMEvent('thread_created', 'low', req, { threadId: result.lastInsertRowid, isPrivate });
+    logSIEM('thread_created', 'low', req, { threadId: result.lastInsertRowid, isPrivate });
     
-    res.json({
-      success: true,
-      threadId: result.lastInsertRowid
-    });
-    
+    res.json({ success: true, threadId: result.lastInsertRowid });
   } catch (error) {
     console.error('Create thread error:', error);
     res.status(500).json({ error: 'Failed to create thread' });
   }
 });
 
-// ============= REPLIES =============
+// ============= REPLIES API =============
 
-// Get replies for thread
 app.get('/api/threads/:id/replies', (req, res) => {
   try {
     const threadId = parseInt(req.params.id);
@@ -644,14 +449,12 @@ app.get('/api/threads/:id/replies', (req, res) => {
     `).all(threadId);
     
     res.json(replies);
-    
   } catch (error) {
     console.error('Get replies error:', error);
     res.status(500).json({ error: 'Failed to fetch replies' });
   }
 });
 
-// Create reply
 app.post('/api/threads/:id/replies', requireAuth, (req, res) => {
   try {
     const threadId = parseInt(req.params.id);
@@ -659,15 +462,9 @@ app.post('/api/threads/:id/replies', requireAuth, (req, res) => {
     const userId = req.session.userId;
     
     if (!text || text.length < 5 || text.length > 2000) {
-      return res.status(400).json({ error: 'Reply must be 5-2000 characters' });
+      return res.status(400).json({ error: 'Invalid reply text' });
     }
     
-    if (detectXSS(text)) {
-      logSIEMEvent('xss_attempt', 'high', req, { text });
-      return res.status(400).json({ error: 'Invalid input detected' });
-    }
-    
-    // Check if thread exists and user has access
     const thread = db.prepare('SELECT is_private FROM threads WHERE id = ?').get(threadId);
     
     if (!thread) {
@@ -685,57 +482,50 @@ app.post('/api/threads/:id/replies', requireAuth, (req, res) => {
     const result = db.prepare(`
       INSERT INTO replies (thread_id, author_id, text, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(threadId, userId, sanitizeInput(text), Date.now());
+    `).run(threadId, userId, sanitize(text), Date.now());
     
-    logSIEMEvent('reply_created', 'low', req, { threadId, replyId: result.lastInsertRowid });
+    logSIEM('reply_created', 'low', req, { threadId, replyId: result.lastInsertRowid });
     
-    res.json({
-      success: true,
-      replyId: result.lastInsertRowid
-    });
-    
+    res.json({ success: true, replyId: result.lastInsertRowid });
   } catch (error) {
     console.error('Create reply error:', error);
     res.status(500).json({ error: 'Failed to create reply' });
   }
 });
 
-// ============= ADMIN ROUTES =============
+// ============= ADMIN API =============
 
-// Generate access keys
 app.post('/api/admin/keys/generate', requireAdmin, (req, res) => {
   try {
     const { count } = req.body;
     const userId = req.session.userId;
     
     if (!count || count < 1 || count > 50) {
-      return res.status(400).json({ error: 'Count must be 1-50' });
+      return res.status(400).json({ error: 'Invalid count' });
     }
     
     const keys = [];
     
     for (let i = 0; i < count; i++) {
-      const keyCode = generateAccessKey();
+      const key = generateKey();
       
       db.prepare(`
         INSERT INTO access_keys (key_code, created_by, created_at)
         VALUES (?, ?, ?)
-      `).run(keyCode, userId, Date.now());
+      `).run(key, userId, Date.now());
       
-      keys.push(keyCode);
+      keys.push(key);
     }
     
-    logSIEMEvent('keys_generated', 'medium', req, { count, keys });
+    logSIEM('keys_generated', 'medium', req, { count });
     
     res.json({ success: true, keys });
-    
   } catch (error) {
     console.error('Generate keys error:', error);
     res.status(500).json({ error: 'Failed to generate keys' });
   }
 });
 
-// Get all keys
 app.get('/api/admin/keys', requireAdmin, (req, res) => {
   try {
     const keys = db.prepare(`
@@ -752,14 +542,12 @@ app.get('/api/admin/keys', requireAdmin, (req, res) => {
       ...k,
       is_active: Boolean(k.is_active)
     })));
-    
   } catch (error) {
     console.error('Get keys error:', error);
     res.status(500).json({ error: 'Failed to fetch keys' });
   }
 });
 
-// Get stats
 app.get('/api/admin/stats', requireAdmin, (req, res) => {
   try {
     const stats = {
@@ -774,7 +562,6 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
     };
     
     res.json(stats);
-    
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
@@ -791,7 +578,7 @@ app.get('*', (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
-  logSIEMEvent('server_error', 'high', req, { error: err.message });
+  logSIEM('server_error', 'high', req, { error: err.message });
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -800,15 +587,11 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 offensive-forum running on http://localhost:${PORT}`);
   console.log(`📊 Database: ${process.env.DB_PATH || './database.sqlite'}`);
-  console.log(`🔒 Session secret: ${process.env.SESSION_SECRET ? 'SET' : 'DEFAULT (CHANGE IT!)'}`);
-  console.log('');
-  console.log('📝 To initialize database: npm run init-db');
   console.log('');
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down gracefully...');
+  console.log('\n🛑 Shutting down...');
   db.close();
   process.exit(0);
 });
