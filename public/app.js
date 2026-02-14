@@ -1,5 +1,7 @@
 // ============= GLOBAL STATE =============
 
+console.log('🔥 offensive-forum app.js loaded!');
+
 let currentUser = null;
 let currentLanguage = localStorage.getItem('forum_language') || 'en';
 let allThreads = [];
