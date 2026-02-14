@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import bcrypt from 'bcrypt';
 import session from 'express-session';
 import connectSqlite3 from 'connect-sqlite3';
-import { rateLimit } from 'express-rate-limit';
+import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -18,8 +18,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// SQLite Session Store
-const SQLiteStore = connectSqlite3(session);6
+// SQLite Session Store - FIXED IMPORT
+const SQLiteStore = connectSqlite3(session);
+
 // Database connection
 const db = new Database(process.env.DB_PATH || './database.sqlite');
 db.pragma('foreign_keys = ON');
