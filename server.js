@@ -329,21 +329,6 @@ function detectXSS(input) {
   return false;
 }
 
-function generateAccessKey() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const parts = [];
-  
-  for (let i = 0; i < 4; i++) {
-    let part = '';
-    for (let j = 0; j < 4; j++) {
-      part += chars[Math.floor(Math.random() * chars.length)];
-    }
-    parts.push(part);
-  }
-  
-  return parts.join('-');
-}
-
 // ============= AUTH MIDDLEWARE =============
 
 function requireAuth(req, res, next) {
