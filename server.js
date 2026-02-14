@@ -219,19 +219,11 @@ initializeDatabase();
 // ============= MIDDLEWARE =============
 
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:"],
-    }
-  }
+  contentSecurityPolicy: false // Отключаем строгий CSP для работы inline-скриптов
 }));
 
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' ? false : 'http://localhost:3000',
+  origin: true, // Разрешаем все origins
   credentials: true
 }));
 
