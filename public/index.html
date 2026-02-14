@@ -3,27 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>offensive-forum - Secure Forum</title>
+    <title>offensive-forum</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="background-grid"></div>
     <div class="cursor-glow"></div>
-
     <div class="loading-screen" id="loadingScreen">
         <div class="loader"></div>
-        <div class="loading-text">Loading secured forum...</div>
+        <div class="loading-text" data-i18n="loading">Loading...</div>
     </div>
-
+    
     <header>
         <div class="header-content">
-            <div class="logo">
-                🔒 offensive-forum
-                <span class="security-badge">Secured</span>
-            </div>
+            <div class="logo">🔒 offensive-forum <span class="security-badge">Secured</span></div>
             <div class="header-right" id="headerButtons">
-                <button class="btn btn-lang" onclick="toggleLanguage()" id="langBtn">RU</button>
-                <button class="btn" onclick="showModal('loginModal')">Login</button>
+                <button class="btn btn-lang" onclick="app.toggleLang()" id="langBtn">RU</button>
+                <button class="btn" onclick="app.showModal('loginModal')" data-i18n="login">Login</button>
             </div>
         </div>
     </header>
@@ -31,32 +27,24 @@
     <div class="container">
         <div class="sidebar">
             <div class="nav-section">
-                <div class="nav-title">Navigation</div>
-                <div class="nav-item active" onclick="showSection('public')">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
-                    </svg>
-                    <span>Public Threads</span>
+                <div class="nav-title" data-i18n="navigation">Navigation</div>
+                <div class="nav-item active" onclick="app.showSection('public')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    <span data-i18n="public_threads">Public Threads</span>
                 </div>
-                <div class="nav-item" id="privateNav" style="display: none;" onclick="showSection('private')">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                    </svg>
-                    <span>Private Threads</span>
+                <div class="nav-item" id="privateNav" style="display: none;" onclick="app.showSection('private')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    <span data-i18n="private_threads">Private Threads</span>
                 </div>
-                <div class="nav-item" id="adminNav" style="display: none;" onclick="showSection('admin')">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
-                    <span>Admin Panel</span>
+                <div class="nav-item" id="adminNav" style="display: none;" onclick="app.showSection('admin')">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span data-i18n="admin_panel">Admin Panel</span>
                 </div>
             </div>
-
             <div class="nav-section">
-                <div class="nav-title">Statistics</div>
+                <div class="nav-title" data-i18n="stats">Statistics</div>
                 <div style="background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 8px; padding: 15px;">
-                    <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Total threads</div>
+                    <div style="font-size: 12px; color: #666; margin-bottom: 5px;" data-i18n="total_threads">Total threads</div>
                     <div style="font-size: 24px; font-weight: 700;" id="totalThreads">0</div>
                 </div>
             </div>
@@ -65,59 +53,41 @@
         <div class="main-content">
             <div class="section active" id="publicSection">
                 <div class="section-header">
-                    <h2 class="section-title">Public Threads</h2>
-                    <button class="btn btn-primary" id="createThreadBtn" style="display: none;" onclick="showModal('createThreadModal')">+ Create Thread</button>
+                    <h2 class="section-title" data-i18n="public_threads">Public Threads</h2>
+                    <button class="btn btn-primary" id="createThreadBtn" style="display: none;" onclick="app.showModal('createThreadModal')"><span data-i18n="create_thread">+ Create Thread</span></button>
                 </div>
-                <div id="publicThreads">
-                    <div class="empty-state">Loading...</div>
-                </div>
+                <div id="publicThreads"><div class="empty-state" data-i18n="loading">Loading...</div></div>
             </div>
 
             <div class="section" id="privateSection">
                 <div class="section-header">
-                    <h2 class="section-title">Private Threads</h2>
+                    <h2 class="section-title" data-i18n="private_threads">Private Threads</h2>
                 </div>
-                <div id="privateThreads">
-                    <div class="empty-state">Loading...</div>
-                </div>
+                <div id="privateThreads"><div class="empty-state" data-i18n="loading">Loading...</div></div>
             </div>
 
             <div class="section" id="adminSection">
                 <div class="section-header">
-                    <h2 class="section-title">Admin Panel</h2>
+                    <h2 class="section-title" data-i18n="admin_panel">Admin Panel</h2>
                 </div>
-
                 <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-value" id="totalKeys">0</div>
-                        <div class="stat-label">Total Keys</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="activeKeys">0</div>
-                        <div class="stat-label">Active Keys</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="usedKeys">0</div>
-                        <div class="stat-label">Used Keys</div>
-                    </div>
+                    <div class="stat-card"><div class="stat-value" id="totalKeys">0</div><div class="stat-label" data-i18n="total_keys">Total Keys</div></div>
+                    <div class="stat-card"><div class="stat-value" id="activeKeys">0</div><div class="stat-label" data-i18n="active_keys">Active Keys</div></div>
+                    <div class="stat-card"><div class="stat-value" id="usedKeys">0</div><div class="stat-label" data-i18n="used_keys">Used Keys</div></div>
                 </div>
-
                 <div style="background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 12px; padding: 30px; margin-bottom: 30px;">
-                    <h3 style="font-size: 18px; margin-bottom: 20px;">Generate Keys</h3>
+                    <h3 style="font-size: 18px; margin-bottom: 20px;" data-i18n="generate_keys">Generate Keys</h3>
                     <div style="display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap;">
                         <div class="form-group" style="flex: 1; margin: 0; min-width: 200px;">
-                            <label class="form-label">Number of keys</label>
+                            <label class="form-label" data-i18n="key_count">Number of keys</label>
                             <input type="number" id="keyCount" min="1" max="50" value="1">
                         </div>
-                        <button class="btn btn-primary" onclick="generateKeys()">Generate</button>
+                        <button class="btn btn-primary" onclick="app.generateKeys()"><span data-i18n="generate">Generate</span></button>
                     </div>
                 </div>
-
                 <div style="background: #0f0f0f; border: 1px solid #1a1a1a; border-radius: 12px; padding: 30px;">
-                    <h3 style="font-size: 18px; margin-bottom: 20px;">Keys List</h3>
-                    <div id="keyList">
-                        <div class="empty-state">Loading...</div>
-                    </div>
+                    <h3 style="font-size: 18px; margin-bottom: 20px;" data-i18n="keys_list">Keys List</h3>
+                    <div id="keyList"><div class="empty-state" data-i18n="loading">Loading...</div></div>
                 </div>
             </div>
         </div>
@@ -125,11 +95,9 @@
 
     <div class="thread-view" id="threadView">
         <div class="thread-detail">
-            <div class="back-btn" onclick="backToList()">
-                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                </svg>
-                <span>Back</span>
+            <div class="back-btn" onclick="app.backToList()">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                <span data-i18n="back">Back</span>
             </div>
             <div id="threadContent"></div>
         </div>
@@ -139,26 +107,26 @@
     <div class="modal" id="loginModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Login</h3>
-                <button class="close-btn" onclick="closeModal('loginModal')">×</button>
+                <h3 class="modal-title" data-i18n="login">Login</h3>
+                <button class="close-btn" onclick="app.closeModal('loginModal')">×</button>
             </div>
-            <form onsubmit="login(event)">
+            <form onsubmit="app.login(event)">
                 <div class="form-group">
-                    <label class="form-label">Username</label>
+                    <label class="form-label" data-i18n="username">Username</label>
                     <input type="text" id="loginUsername" required minlength="3" maxlength="50">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Password</label>
+                    <label class="form-label" data-i18n="password">Password</label>
                     <input type="password" id="loginPassword" required minlength="6">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Access Key (optional)</label>
+                    <label class="form-label" data-i18n="access_key_opt">Access Key (optional)</label>
                     <input type="text" id="loginAccessKey" placeholder="XXXX-XXXX-XXXX-XXXX">
-                    <small style="color: #666; font-size: 12px;">Use access key to unlock private threads</small>
+                    <small style="color: #666; font-size: 12px;" data-i18n="key_help">Use access key to unlock private threads</small>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Login</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%;"><span data-i18n="login">Login</span></button>
                 <div style="text-align: center; margin-top: 15px;">
-                    <a href="#" onclick="showModal('registerModal'); closeModal('loginModal'); return false;" style="color: #4ade80;">Don't have an account? Register</a>
+                    <a href="#" onclick="app.showModal('registerModal'); app.closeModal('loginModal'); return false;" style="color: #4ade80;"><span data-i18n="no_account">Don't have an account? Register</span></a>
                 </div>
             </form>
         </div>
@@ -168,25 +136,25 @@
     <div class="modal" id="registerModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Register</h3>
-                <button class="close-btn" onclick="closeModal('registerModal')">×</button>
+                <h3 class="modal-title" data-i18n="register">Register</h3>
+                <button class="close-btn" onclick="app.closeModal('registerModal')">×</button>
             </div>
-            <form onsubmit="register(event)">
+            <form onsubmit="app.register(event)">
                 <div class="form-group">
-                    <label class="form-label">Username</label>
+                    <label class="form-label" data-i18n="username">Username</label>
                     <input type="text" id="registerUsername" required minlength="3" maxlength="50">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Email</label>
+                    <label class="form-label" data-i18n="email">Email</label>
                     <input type="email" id="registerEmail" required>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Password</label>
+                    <label class="form-label" data-i18n="password">Password</label>
                     <input type="password" id="registerPassword" required minlength="6">
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">Register</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%;"><span data-i18n="register">Register</span></button>
                 <div style="text-align: center; margin-top: 15px;">
-                    <a href="#" onclick="showModal('loginModal'); closeModal('registerModal'); return false;" style="color: #4ade80;">Already have an account? Login</a>
+                    <a href="#" onclick="app.showModal('loginModal'); app.closeModal('registerModal'); return false;" style="color: #4ade80;"><span data-i18n="have_account">Already have an account? Login</span></a>
                 </div>
             </form>
         </div>
@@ -196,23 +164,23 @@
     <div class="modal" id="createThreadModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Create New Thread</h3>
-                <button class="close-btn" onclick="closeModal('createThreadModal')">×</button>
+                <h3 class="modal-title" data-i18n="create_thread">Create New Thread</h3>
+                <button class="close-btn" onclick="app.closeModal('createThreadModal')">×</button>
             </div>
-            <form onsubmit="createThread(event)">
+            <form onsubmit="app.createThread(event)">
                 <div class="form-group">
-                    <label class="form-label">Title</label>
+                    <label class="form-label" data-i18n="title">Title</label>
                     <input type="text" id="threadTitle" required minlength="5" maxlength="200">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Description</label>
+                    <label class="form-label" data-i18n="description">Description</label>
                     <textarea id="threadBody" required minlength="10" maxlength="5000"></textarea>
                 </div>
-                <div class="checkbox-group" id="privateCheckboxContainer" style="display: none;">
+                <div class="checkbox-group" id="privateCheckbox" style="display: none;">
                     <input type="checkbox" id="isPrivate">
-                    <label for="isPrivate">Private thread (admin only)</label>
+                    <label for="isPrivate" data-i18n="private_thread_label">Private thread (admin only)</label>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">Create</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;"><span data-i18n="create">Create</span></button>
             </form>
         </div>
     </div>
